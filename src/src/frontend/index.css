@@ -1,0 +1,129 @@
+@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --radius: 0.25rem;
+    /* Cricket field cream/white backgrounds with dark green text */
+    --background: 0.98 0.01 85;
+    --foreground: 0.28 0.08 145;
+    --card: 0.96 0.015 85;
+    --card-foreground: 0.28 0.08 145;
+    --popover: 0.98 0.01 85;
+    --popover-foreground: 0.28 0.08 145;
+    /* Cricket pitch green - primary action color */
+    --primary: 0.42 0.12 145;
+    --primary-foreground: 0.98 0.01 85;
+    /* Light green secondary */
+    --secondary: 0.88 0.05 145;
+    --secondary-foreground: 0.28 0.08 145;
+    /* Muted greens */
+    --muted: 0.92 0.03 145;
+    --muted-foreground: 0.52 0.06 145;
+    /* Orange accent - cricket ball seams */
+    --accent: 0.65 0.18 45;
+    --accent-foreground: 0.98 0.01 85;
+    /* Destructive red */
+    --destructive: 0.55 0.22 25;
+    --destructive-foreground: 0.98 0.01 85;
+    /* Success green (darker than primary) */
+    --success: 0.5 0.14 145;
+    --success-foreground: 0.98 0.01 85;
+    /* Borders and inputs */
+    --border: 0.85 0.03 145;
+    --input: 0.85 0.03 145;
+    --ring: 0.42 0.12 145;
+    /* Charts - cricket themed colors */
+    --chart-1: 0.42 0.12 145;
+    --chart-2: 0.65 0.18 45;
+    --chart-3: 0.7 0.15 85;
+    --chart-4: 0.55 0.16 200;
+    --chart-5: 0.6 0.14 280;
+    /* Sidebar */
+    --sidebar: 0.96 0.015 85;
+    --sidebar-foreground: 0.28 0.08 145;
+    --sidebar-primary: 0.42 0.12 145;
+    --sidebar-primary-foreground: 0.98 0.01 85;
+    --sidebar-accent: 0.88 0.05 145;
+    --sidebar-accent-foreground: 0.28 0.08 145;
+    --sidebar-border: 0.85 0.03 145;
+    --sidebar-ring: 0.42 0.12 145;
+  }
+
+  .dark {
+    /* Deep green pitch night mode */
+    --background: 0.18 0.06 145;
+    --foreground: 0.95 0.02 85;
+    --card: 0.25 0.08 145;
+    --card-foreground: 0.95 0.02 85;
+    --popover: 0.22 0.07 145;
+    --popover-foreground: 0.95 0.02 85;
+    /* Bright green for dark mode */
+    --primary: 0.68 0.15 145;
+    --primary-foreground: 0.18 0.06 145;
+    /* Darker green secondary */
+    --secondary: 0.32 0.09 145;
+    --secondary-foreground: 0.95 0.02 85;
+    /* Muted */
+    --muted: 0.28 0.08 145;
+    --muted-foreground: 0.65 0.08 145;
+    /* Bright orange accent */
+    --accent: 0.72 0.2 45;
+    --accent-foreground: 0.18 0.06 145;
+    /* Destructive */
+    --destructive: 0.62 0.24 25;
+    --destructive-foreground: 0.95 0.02 85;
+    /* Success */
+    --success: 0.58 0.16 145;
+    --success-foreground: 0.95 0.02 85;
+    /* Borders */
+    --border: 0.35 0.09 145;
+    --input: 0.35 0.09 145;
+    --ring: 0.68 0.15 145;
+    /* Charts */
+    --chart-1: 0.68 0.15 145;
+    --chart-2: 0.72 0.2 45;
+    --chart-3: 0.75 0.16 85;
+    --chart-4: 0.6 0.18 200;
+    --chart-5: 0.65 0.16 280;
+    /* Sidebar */
+    --sidebar: 0.22 0.07 145;
+    --sidebar-foreground: 0.95 0.02 85;
+    --sidebar-primary: 0.68 0.15 145;
+    --sidebar-primary-foreground: 0.18 0.06 145;
+    --sidebar-accent: 0.28 0.08 145;
+    --sidebar-accent-foreground: 0.95 0.02 85;
+    --sidebar-border: 0.35 0.09 145;
+    --sidebar-ring: 0.68 0.15 145;
+  }
+
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground font-body;
+  }
+}
+
+@layer utilities {
+  .font-display {
+    font-family: 'Bebas Neue', sans-serif;
+    letter-spacing: 0.02em;
+  }
+  
+  .font-body {
+    font-family: 'Inter', sans-serif;
+  }
+  
+  .stat-card {
+    @apply relative overflow-hidden;
+    transform: skewY(-1deg);
+  }
+  
+  .stat-card-content {
+    transform: skewY(1deg);
+  }
+}
