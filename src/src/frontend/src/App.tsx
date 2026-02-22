@@ -42,7 +42,9 @@ function Navigation() {
     { to: '/matches', label: 'Matches', icon: Trophy },
   ];
   
-  if (isAdmin) {
+  // Show Admin link to all authenticated users
+  // Authorization is handled on the AdminPage itself
+  if (isAuthenticated) {
     navLinks.push({ to: '/admin', label: 'Admin', icon: Shield });
   }
   

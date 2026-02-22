@@ -154,6 +154,7 @@ export interface backendInterface {
     _initializeAccessControlWithSecret(userSecret: string): Promise<void>;
     assignCallerUserRole(user: Principal, role: UserRole): Promise<void>;
     createMatch(team1: bigint, team2: bigint, date: Time): Promise<bigint>;
+    deleteMatch(matchId: bigint): Promise<void>;
     deletePlayer(id: bigint): Promise<void>;
     getAllMatches(): Promise<Array<Match>>;
     getAllPlayers(): Promise<Array<Player>>;
@@ -301,6 +302,20 @@ export class Backend implements backendInterface {
             }
         } else {
             const result = await this.actor.createMatch(arg0, arg1, arg2);
+            return result;
+        }
+    }
+    async deleteMatch(arg0: bigint): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.deleteMatch(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.deleteMatch(arg0);
             return result;
         }
     }

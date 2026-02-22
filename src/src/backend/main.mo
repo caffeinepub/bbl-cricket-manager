@@ -1,37 +1,30 @@
 import Time "mo:core/Time";
-import Order "mo:core/Order";
 import Array "mo:core/Array";
 import Map "mo:core/Map";
-import Text "mo:core/Text";
 import Iter "mo:core/Iter";
-import Int "mo:core/Int";
+import Order "mo:core/Order";
 import Nat "mo:core/Nat";
 import Principal "mo:core/Principal";
 import Runtime "mo:core/Runtime";
 import MixinAuthorization "authorization/MixinAuthorization";
 import AccessControl "authorization/access-control";
+import Migration "migration";
 import Storage "blob-storage/Storage";
 import MixinStorage "blob-storage/Mixin";
 
+(with migration = Migration.run)
 actor {
   include MixinStorage();
 
-  // Roles
-  public type UserRole = AccessControl.UserRole;
-
-  // Combine authorization
   let accessControlState = AccessControl.initState();
   include MixinAuthorization(accessControlState);
 
-  // User Profile type
+  // Types
   public type UserProfile = {
     name : Text;
     email : Text;
   };
 
-  let userProfiles = Map.empty<Principal, UserProfile>();
-
-  // Team, Player, Match types
   public type CategoryType = { #batting; #bowling; #spinBowling; #allRounder };
 
   public type Player = {
@@ -66,24 +59,14 @@ actor {
     performances : [MatchPerformance];
   };
 
-  // Player comparison modules
-  module Player {
-    public func compareByWickets(a : Player, b : Player) : Order.Order {
-      Nat.compare(b.totalWickets, a.totalWickets);
-    };
-
-    public func compareByRuns(a : Player, b : Player) : Order.Order {
-      Nat.compare(b.totalRuns, a.totalRuns);
-    };
-  };
-
   // State
   var nextPlayerId = 1;
   let players = Map.empty<Nat, Player>();
   var nextMatchId = 1;
   let matches = Map.empty<Nat, Match>();
+  let userProfiles = Map.empty<Principal, UserProfile>();
 
-  // Initialize teams with all 11 BBL teams
+  // Teams are pre-populated and read-only
   let teams = Map.empty<Nat, Team>();
   let teamData = [
     { id = 1; name = "Tilatand" },
@@ -102,11 +85,9 @@ actor {
     teams.add(team.id, team);
   };
 
-  // User Profile Management
+  // --- User Profile Management ---
   public query ({ caller }) func getCallerUserProfile() : async ?UserProfile {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
-      Runtime.trap("Unauthorized: Only users can view profiles");
-    };
+    checkAuthenticatedUser(caller);
     userProfiles.get(caller);
   };
 
@@ -118,13 +99,13 @@ actor {
   };
 
   public shared ({ caller }) func saveCallerUserProfile(profile : UserProfile) : async () {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
-      Runtime.trap("Unauthorized: Only users can save profiles");
-    };
+    checkAuthenticatedUser(caller);
     userProfiles.add(caller, profile);
   };
 
-  // Player Management
+  // --- Player Management ---
+
+  // Self-registration for players (authenticated users)
   public shared ({ caller }) func registerPlayer(
     name : Text,
     dob : Text,
@@ -134,16 +115,11 @@ actor {
     category : CategoryType,
     teamId : Nat,
   ) : async Nat {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
-      Runtime.trap("Unauthorized: Only users can register players");
-    };
+    checkAuthenticatedUser(caller);
+    validateTeamExists(teamId);
 
     let id = nextPlayerId;
     nextPlayerId += 1;
-
-    if (not teams.containsKey(teamId)) {
-      Runtime.trap("Team does not exist");
-    };
 
     let player : Player = {
       id;
@@ -172,18 +148,9 @@ actor {
     category : CategoryType,
     teamId : Nat,
   ) : async () {
-    if (not AccessControl.isAdmin(accessControlState, caller)) {
-      Runtime.trap("Unauthorized: Only admins can update player profiles");
-    };
-
-    let player = switch (players.get(id)) {
-      case (null) { Runtime.trap("Player not found") };
-      case (?player) { player };
-    };
-
-    if (not teams.containsKey(teamId)) {
-      Runtime.trap("Team does not exist");
-    };
+    checkAdminRights(caller);
+    let player = getPlayerById(id);
+    validateTeamExists(teamId);
 
     let updatedPlayer : Player = {
       id;
@@ -202,23 +169,17 @@ actor {
   };
 
   public shared ({ caller }) func deletePlayer(id : Nat) : async () {
-    if (not AccessControl.isAdmin(accessControlState, caller)) {
-      Runtime.trap("Unauthorized: Only admins can delete players");
-    };
-    if (not players.containsKey(id)) {
-      Runtime.trap("Player not found");
-    };
+    checkAdminRights(caller);
+    validatePlayerExists(id);
     players.remove(id);
   };
 
-  public shared ({ caller }) func createMatch(team1 : Nat, team2 : Nat, date : Time.Time) : async Nat {
-    if (not AccessControl.isAdmin(accessControlState, caller)) {
-      Runtime.trap("Unauthorized: Only admins can create matches");
-    };
+  // --- Match Management ---
 
-    if (not teams.containsKey(team1) or not teams.containsKey(team2)) {
-      Runtime.trap("Teams do not exist");
-    };
+  public shared ({ caller }) func createMatch(team1 : Nat, team2 : Nat, date : Time.Time) : async Nat {
+    checkAdminRights(caller);
+    validateTeamExists(team1);
+    validateTeamExists(team2);
 
     let id = nextMatchId;
     nextMatchId += 1;
@@ -241,18 +202,10 @@ actor {
     runs : Nat,
     wickets : Nat,
   ) : async () {
-    if (not AccessControl.isAdmin(accessControlState, caller)) {
-      Runtime.trap("Unauthorized: Only admins can record player performance");
-    };
+    checkAdminRights(caller);
 
-    let match = switch (matches.get(matchId)) {
-      case (null) { Runtime.trap("Match not found") };
-      case (?match) { match };
-    };
-    let _player = switch (players.get(playerId)) {
-      case (null) { Runtime.trap("Player not found") };
-      case (?player) { player };
-    };
+    let match = getMatchById(matchId);
+    let _ = getPlayerById(playerId);
 
     let newPerformance : MatchPerformance = {
       playerId;
@@ -269,9 +222,88 @@ actor {
     };
 
     matches.add(matchId, updatedMatch);
-
-    // Update aggregate stats
     updatePlayerStats(playerId, runs, wickets);
+  };
+
+  public shared ({ caller }) func deleteMatch(matchId : Nat) : async () {
+    checkAdminRights(caller);
+    validateMatchExists(matchId);
+    matches.remove(matchId);
+  };
+
+  // --- Read-only Queries ---
+  public query func getAllPlayers() : async [Player] {
+    players.values().toArray();
+  };
+
+  public query func getPlayersByTeam(teamId : Nat) : async [Player] {
+    players.values().toArray().filter(func(player) { player.teamId == teamId });
+  };
+
+  public query func getPlayersByCategory(category : CategoryType) : async [Player] {
+    players.values().toArray().filter(func(player) { player.category == category });
+  };
+
+  public query func getAllTeams() : async [Team] {
+    teams.values().toArray();
+  };
+
+  public query func getTeamById(id : Nat) : async ?Team {
+    teams.get(id);
+  };
+
+  public query func getAllMatches() : async [Match] {
+    matches.values().toArray();
+  };
+
+  public query func getMatchDetails(id : Nat) : async Match {
+    switch (matches.get(id)) {
+      case (null) { Runtime.trap("Match not found") };
+      case (?match) { match };
+    };
+  };
+
+  // --- Statistics Queries ---
+  public query func getBestBatsman() : async Player {
+    findTopPlayerByMetric(func(p) { p.totalRuns }, func() { #batting });
+  };
+
+  public query func getBestBowler() : async Player {
+    findTopPlayerByMetric(func(p) { p.totalWickets }, func() { #bowling });
+  };
+
+  public query func getBestSpinBowler() : async Player {
+    findTopPlayerByMetric(func(p) { p.totalWickets }, func() { #spinBowling });
+  };
+
+  public query func getBestAllRounder() : async Player {
+    func allRounderScore(p : Player) : Nat {
+      p.totalRuns + p.totalWickets;
+    };
+    findTopPlayerByMetric(allRounderScore, func() { #allRounder });
+  };
+
+  // --- Helper Functions ---
+
+  func findTopPlayerByMetric(
+    metric : (Player) -> Nat,
+    categoryFilter : () -> CategoryType
+  ) : Player {
+    let filtered = players.values().toArray().filter(
+      func(player) { player.category == categoryFilter() }
+    );
+    if (filtered.size() == 0) {
+      Runtime.trap("No players found");
+    };
+
+    filtered.foldLeft<Player, Player>(
+      filtered[0],
+      func(currentBest, player) {
+        if (metric(player) > metric(currentBest)) { player } else {
+          currentBest;
+        };
+      },
+    );
   };
 
   func updatePlayerStats(playerId : Nat, runs : Nat, wickets : Nat) {
@@ -295,119 +327,53 @@ actor {
     };
   };
 
-  // Read-only queries - no authorization needed (anyone can view)
-  public query ({ caller }) func getAllPlayers() : async [Player] {
-    players.values().toArray();
+  // --- Validation & Authorization ---
+  func validateTeamExists(teamId : Nat) {
+    if (not teams.containsKey(teamId)) {
+      Runtime.trap("Team does not exist");
+    };
   };
 
-  public query ({ caller }) func getPlayersByTeam(teamId : Nat) : async [Player] {
-    players.values().toArray().filter(func(player) { player.teamId == teamId });
+  func getPlayerById(playerId : Nat) : Player {
+    switch (players.get(playerId)) {
+      case (null) { Runtime.trap("Player not found") };
+      case (?player) { player };
+    };
   };
 
-  public query ({ caller }) func getPlayersByCategory(category : CategoryType) : async [Player] {
-    players.values().toArray().filter(func(player) { player.category == category });
-  };
-
-  public query ({ caller }) func getAllTeams() : async [Team] {
-    teams.values().toArray();
-  };
-
-  public query ({ caller }) func getTeamById(id : Nat) : async ?Team {
-    teams.get(id);
-  };
-
-  public query ({ caller }) func getAllMatches() : async [Match] {
-    matches.values().toArray();
-  };
-
-  public query ({ caller }) func getMatchDetails(id : Nat) : async Match {
-    switch (matches.get(id)) {
+  func getMatchById(matchId : Nat) : Match {
+    switch (matches.get(matchId)) {
       case (null) { Runtime.trap("Match not found") };
       case (?match) { match };
     };
   };
 
-  // Statistics queries - find best players by total runs/wickets
-  public query ({ caller }) func getBestBatsman() : async Player {
-    let allPlayers = players.values().toArray();
-    if (allPlayers.size() == 0) {
-      Runtime.trap("No players found");
+  func validatePlayerExists(playerId : Nat) {
+    if (not players.containsKey(playerId)) {
+      Runtime.trap("Player not found");
     };
-
-    func findBestPlayerByRuns(currentBest : Player, player : Player) : Player {
-      if (player.totalRuns > currentBest.totalRuns) { player } else {
-        currentBest;
-      };
-    };
-
-    allPlayers.foldLeft<Player, Player>(
-      allPlayers[0],
-      findBestPlayerByRuns,
-    );
   };
 
-  public query ({ caller }) func getBestBowler() : async Player {
-    let allPlayers = players.values().toArray();
-    if (allPlayers.size() == 0) {
-      Runtime.trap("No players found");
+  func validateMatchExists(matchId : Nat) {
+    if (not matches.containsKey(matchId)) {
+      Runtime.trap("Match not found");
     };
-
-    func findBestPayerByWickets(currentBest : Player, player : Player) : Player {
-      if (player.totalWickets > currentBest.totalWickets) { player } else {
-        currentBest;
-      };
-    };
-
-    allPlayers.foldLeft<Player, Player>(
-      allPlayers[0],
-      findBestPayerByWickets,
-    );
   };
 
-  public query ({ caller }) func getBestSpinBowler() : async Player {
-    let filtered = players.values().toArray().filter(func(player) { player.category == #spinBowling });
-    if (filtered.size() == 0) {
-      Runtime.trap("No spin bowlers found");
+  func checkAuthenticatedUser(caller : Principal) {
+    // Reject anonymous users
+    if (Principal.fromText("2vxsx-fae") == caller) {
+      Runtime.trap("Unauthorized: Anonymous users not allowed");
     };
-
-    func findBestSpinBowler(currentBest : Player, player : Player) : Player {
-      if (player.totalWickets > currentBest.totalWickets) { player } else {
-        currentBest;
-      };
-    };
-
-    filtered.foldLeft<Player, Player>(
-      filtered[0],
-      findBestSpinBowler,
-    );
+    
+    // All non-anonymous (authenticated) principals are allowed
+    // This allows new users to register as players without requiring
+    // admin initialization via the CAFFEINE_ADMIN_TOKEN
   };
 
-  public query ({ caller }) func getBestAllRounder() : async Player {
-    let filtered = players.values().toArray().filter(func(player) { player.category == #allRounder });
-    if (filtered.size() == 0) {
-      Runtime.trap("No all-rounders found");
-    };
-
-    func findBestAllRounder(currentBest : Player, player : Player) : Player {
-      if ((player.totalRuns + player.totalWickets) > (currentBest.totalRuns + currentBest.totalWickets)) {
-        player;
-      } else {
-        currentBest;
-      };
-    };
-
-    filtered.foldLeft<Player, Player>(
-      filtered[0],
-      findBestAllRounder,
-    );
-  };
-
-  func findTopPlayer(category : CategoryType) : Player {
-    let filtered = players.values().toArray().filter(func(player) { player.category == category });
-    switch (filtered.size()) {
-      case (0) { Runtime.trap("No players found") };
-      case (_) { filtered[0] };
+  func checkAdminRights(caller : Principal) {
+    if (not AccessControl.isAdmin(accessControlState, caller)) {
+      Runtime.trap("Unauthorized: Only admins can perform this action");
     };
   };
 };
-

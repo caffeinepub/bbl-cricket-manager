@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
 import { Loader2, Upload, UserPlus } from 'lucide-react';
-import { CategoryType, ExternalBlob } from '../backend.d';
+import { CategoryType, ExternalBlob } from '../backend';
 
 export default function RegisterPage() {
   const navigate = useNavigate();
@@ -70,8 +70,27 @@ export default function RegisterPage() {
       const bytes = new Uint8Array(arrayBuffer);
       
       // Create ExternalBlob with upload progress
-      const photoBlob = ExternalBlob.fromBytes(bytes).withUploadProgress((percentage) => {
-        setUploadProgress(percentage);
+      let photoBlob;
+      try {
+        photoBlob = ExternalBlob.fromBytes(bytes).withUploadProgress((percentage) => {
+          setUploadProgress(percentage);
+        });
+      } catch (blobError) {
+        console.error('ExternalBlob creation error:', blobError);
+        const blobErrorMessage = blobError instanceof Error ? blobError.message : String(blobError);
+        toast.error(`Failed to process photo: ${blobErrorMessage}`);
+        return;
+      }
+      
+      // Log registration attempt details
+      console.log('Attempting registration with data:', {
+        name: formData.name,
+        dob: formData.dob,
+        place: formData.place,
+        localResidence: formData.localResidence,
+        category: formData.category,
+        teamId: formData.teamId,
+        photoSize: bytes.length
       });
       
       await registerMutation.mutateAsync({
@@ -87,8 +106,13 @@ export default function RegisterPage() {
       toast.success('Player registered successfully!');
       navigate({ to: '/players' });
     } catch (error) {
-      console.error('Registration error:', error);
-      toast.error('Failed to register player. Please try again.');
+      console.error('Registration error details:', error);
+      const errorMessage = error instanceof Error 
+        ? error.message 
+        : typeof error === 'string' 
+        ? error 
+        : 'Failed to register player. Please try again.';
+      toast.error(`Registration failed: ${errorMessage}`);
     }
   };
   

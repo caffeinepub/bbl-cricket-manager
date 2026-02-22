@@ -283,3 +283,49 @@ export function useIsCallerAdmin() {
     enabled: !!actor && !isFetching,
   });
 }
+
+export function usePromoteToAdmin() {
+  const { actor } = useActor();
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async (adminSecret: string) => {
+      if (!actor) throw new Error('Actor not available');
+      console.log('Initializing admin with secret:', adminSecret ? '***' : '(empty)');
+      
+      try {
+        // @ts-ignore - _initializeAccessControlWithSecret exists but not in types
+        const result = await actor._initializeAccessControlWithSecret(adminSecret);
+        console.log('Admin initialization result:', result);
+        return result;
+      } catch (error: any) {
+        console.error('Admin initialization error:', error);
+        
+        // Check if the error is about missing CAFFEINE_ADMIN_TOKEN
+        const errorMessage = error?.message || String(error);
+        if (errorMessage.includes('CAFFEINE_ADMIN_TOKEN') || errorMessage.includes('environment variable')) {
+          throw new Error('ENVIRONMENT_VARIABLE_MISSING: The CAFFEINE_ADMIN_TOKEN environment variable is not configured. Please contact your system administrator or check the deployment configuration.');
+        }
+        
+        // Check if admin is already assigned
+        if (errorMessage.includes('already assigned') || errorMessage.includes('Admin already exists')) {
+          throw new Error('ADMIN_EXISTS: An admin has already been assigned for this system. Please contact the existing administrator for access.');
+        }
+        
+        // Generic error
+        throw new Error(errorMessage || 'Failed to initialize admin access');
+      }
+    },
+    onSuccess: async () => {
+      console.log('Admin initialization successful, invalidating queries');
+      await queryClient.invalidateQueries({ queryKey: ['isAdmin'] });
+      await queryClient.invalidateQueries({ queryKey: ['userRole'] });
+      
+      // Reload the page after a short delay to ensure the UI updates
+      setTimeout(() => {
+        console.log('Reloading page to refresh admin status');
+        window.location.reload();
+      }, 1000);
+    },
+  });
+}

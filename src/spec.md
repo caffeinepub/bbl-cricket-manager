@@ -1,46 +1,63 @@
 # BBL Cricket Manager
 
 ## Current State
-The BBL Cricket Manager app has been deployed with:
-- Player registration form with fields: name, DOB, place, local residential name, photo upload, category selection, and team selection
-- Player Category dropdown works correctly with 4 options (Batting, Bowling, Spin Bowling, All Rounder)
-- Team dropdown component exists but displays no team names
-- Backend has `getAllTeams()` and `initializeTeams()` methods
-- Frontend queries teams using `useGetAllTeams()` hook
 
-**Problem:** Team dropdown opens but shows no teams because the backend teams are not being fetched/displayed properly.
+### Authorization Model
+- Backend uses the Caffeine authorization component with admin/user role system
+- `registerPlayer()` currently requires admin rights (`checkAdminRights(caller)`)
+- Admin initialization requires `CAFFEINE_ADMIN_TOKEN` environment variable
+- First-time admin setup calls `_initializeAccessControlWithSecret()`
+
+### Player Registration Flow
+- Players must be admin to register (incorrect per requirements)
+- Registration form exists but fails with "failed to access" error
+- Error occurs because non-admin users cannot call `registerPlayer()`
+
+### Admin Access
+- Admin page shows "Become Admin" initialization form
+- Initialization fails because `CAFFEINE_ADMIN_TOKEN` may not be set or accessible
+- No clear path for first user to become admin
 
 ## Requested Changes (Diff)
 
 ### Add
-- Nothing to add
+- Public player self-registration (any authenticated user can register themselves)
+- Simplified admin initialization that works without environment variable checks
+- Admin role assignment for the first user who clicks "Initialize as Admin"
 
 ### Modify
-- Fix the Team dropdown in RegisterPage to properly display all 11 teams:
-  - Tilatand
-  - Bhattmurna
-  - Bhattdih
-  - Jainagar
-  - Yadavpur
-  - Devghara
-  - Chatrutand
-  - Talgadiya
-  - Madhuban
-  - Daldali
-  - Kapuriya
+- `registerPlayer()` authorization from admin-only to authenticated-user access
+- Admin initialization to be simpler and work on first attempt
+- Authorization check to allow self-registration while keeping admin-only access for:
+  - Creating matches
+  - Recording match scores
+  - Editing other players
+  - Deleting players
 
 ### Remove
-- Nothing to remove
+- Strict `CAFFEINE_ADMIN_TOKEN` requirement for admin initialization (or make it optional)
+- Admin-only restriction from player registration
 
 ## Implementation Plan
 
-1. **Investigate backend team initialization**: Check if teams are being properly created/stored in the backend
-2. **Verify frontend query**: Ensure `useGetAllTeams()` is correctly fetching and returning team data
-3. **Fix team list display**: Update RegisterPage to properly map and display team options in the Select dropdown
-4. **Test the fix**: Verify that all 11 team names appear in the dropdown when clicked
+### Backend Changes (Motoko)
+1. Change `registerPlayer()` from `checkAdminRights(caller)` to `checkAuthenticatedUser(caller)`
+2. Update admin initialization logic to be more permissive:
+   - Allow first user to become admin without strict token validation
+   - OR make `CAFFEINE_ADMIN_TOKEN` check optional for development
+3. Keep admin-only checks for:
+   - `createMatch()`
+   - `recordPlayerPerformance()`
+   - `updatePlayer()`
+   - `deletePlayer()`
+
+### Frontend Changes
+- No changes needed - error handling already in place
+- Once backend is fixed, registration will work automatically
 
 ## UX Notes
-- Team dropdown should work exactly like the Player Category dropdown
-- All 11 teams should be visible when the dropdown is opened
-- Team names should be displayed in their original spelling
-- Users should be able to select any of the 11 teams
+
+- Players should be able to register themselves with name, DOB, place, residence, photo, category, and team
+- Only the first user needs to initialize admin access via the Admin page
+- After initialization, that user becomes admin and can manage all cricket data
+- All other users can register as players but cannot access admin functions

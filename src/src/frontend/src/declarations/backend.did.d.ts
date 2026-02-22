@@ -75,6 +75,7 @@ export interface _SERVICE {
   '_initializeAccessControlWithSecret' : ActorMethod<[string], undefined>,
   'assignCallerUserRole' : ActorMethod<[Principal, UserRole], undefined>,
   'createMatch' : ActorMethod<[bigint, bigint, Time], bigint>,
+  'deleteMatch' : ActorMethod<[bigint], undefined>,
   'deletePlayer' : ActorMethod<[bigint], undefined>,
   'getAllMatches' : ActorMethod<[], Array<Match>>,
   'getAllPlayers' : ActorMethod<[], Array<Player>>,

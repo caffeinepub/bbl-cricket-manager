@@ -61,6 +61,7 @@ export enum UserRole {
 export interface backendInterface {
     assignCallerUserRole(user: Principal, role: UserRole): Promise<void>;
     createMatch(team1: bigint, team2: bigint, date: Time): Promise<bigint>;
+    deleteMatch(matchId: bigint): Promise<void>;
     deletePlayer(id: bigint): Promise<void>;
     getAllMatches(): Promise<Array<Match>>;
     getAllPlayers(): Promise<Array<Player>>;

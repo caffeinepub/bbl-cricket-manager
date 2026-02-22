@@ -1,45 +1,59 @@
 import Map "mo:core/Map";
 import Nat "mo:core/Nat";
+import Principal "mo:core/Principal";
+import Storage "blob-storage/Storage";
 
 module {
+  type Player = {
+    id : Nat;
+    name : Text;
+    dob : Text;
+    place : Text;
+    localResidence : Text;
+    photo : Storage.ExternalBlob;
+    category : { #batting; #bowling; #spinBowling; #allRounder };
+    teamId : Nat;
+    totalRuns : Nat;
+    totalWickets : Nat;
+  };
+
   type Team = {
     id : Nat;
     name : Text;
   };
 
+  type MatchPerformance = {
+    playerId : Nat;
+    runs : Nat;
+    wickets : Nat;
+  };
+
+  type Match = {
+    id : Nat;
+    team1 : Nat;
+    team2 : Nat;
+    date : Int;
+    performances : [MatchPerformance];
+  };
+
+  type UserProfile = {
+    name : Text;
+    email : Text;
+  };
+
+  // Old actor type
   type OldActor = {
+    nextPlayerId : Nat;
+    players : Map.Map<Nat, Player>;
+    nextMatchId : Nat;
+    matches : Map.Map<Nat, Match>;
+    userProfiles : Map.Map<Principal, UserProfile>;
     teams : Map.Map<Nat, Team>;
   };
 
-  type NewActor = {
-    teams : Map.Map<Nat, Team>;
-  };
+  type NewActor = OldActor;
 
-  // Build teams map with new names.
-  func buildTeams() : Map.Map<Nat, Team> {
-    let newTeams = Map.empty<Nat, Team>();
-    let teamData = [
-      { id = 1; name = "Tilatand" },
-      { id = 2; name = "Bhattmurna" },
-      { id = 3; name = "Bhattdih" },
-      { id = 4; name = "Jainagar" },
-      { id = 5; name = "Yadavpur" },
-      { id = 6; name = "Devghara" },
-      { id = 7; name = "Chatrutand" },
-      { id = 8; name = "Talgadiya" },
-      { id = 9; name = "Madhuban" },
-      { id = 10; name = "Daldali" },
-      { id = 11; name = "Kapuriya" },
-    ];
-
-    for (team in teamData.values()) {
-      newTeams.add(team.id, team);
-    };
-    newTeams;
-  };
-
-  // Migration function.
-  public func run(_old : OldActor) : NewActor {
-    { teams = buildTeams() };
+  public func run(old : OldActor) : NewActor {
+    old;
   };
 };

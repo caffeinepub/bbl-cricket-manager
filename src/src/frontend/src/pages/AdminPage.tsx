@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { useIsCallerAdmin, useGetAllTeams, useGetAllMatches, useGetAllPlayers, useCreateMatch, useRecordPlayerPerformance, useUpdatePlayer, useDeletePlayer } from '../hooks/useQueries';
+import { useIsCallerAdmin, useGetAllTeams, useGetAllMatches, useGetAllPlayers, useCreateMatch, useRecordPlayerPerformance, useUpdatePlayer, useDeletePlayer, usePromoteToAdmin } from '../hooks/useQueries';
+import { useInternetIdentity } from '../hooks/useInternetIdentity';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
@@ -8,8 +9,9 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { toast } from 'sonner';
-import { Shield, Plus, Edit, Trash2, Loader2 } from 'lucide-react';
-import { CategoryType, ExternalBlob } from '../backend.d';
+import { Shield, Plus, Edit, Trash2, Loader2, UserPlus, Info } from 'lucide-react';
+import { CategoryType, ExternalBlob } from '../backend';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
 function CreateMatchTab() {
   const { data: teams } = useGetAllTeams();
@@ -584,6 +586,144 @@ function DeletePlayerTab() {
   );
 }
 
+function AdminPromotionSection() {
+  const { identity } = useInternetIdentity();
+  const promoteToAdminMutation = usePromoteToAdmin();
+  const [adminSecret, setAdminSecret] = useState('');
+  const [showInstructions, setShowInstructions] = useState(false);
+  
+  const handlePromote = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!identity) {
+      toast.error('Please log in first');
+      return;
+    }
+    
+    try {
+      console.log('Starting admin promotion...');
+      await promoteToAdminMutation.mutateAsync(adminSecret);
+      toast.success('Successfully promoted to admin! Refreshing page...');
+      setAdminSecret('');
+    } catch (error) {
+      console.error('Promotion error:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      console.error('Error details:', errorMessage);
+      
+      // Show user-friendly error messages
+      if (errorMessage.includes('ENVIRONMENT_VARIABLE_MISSING')) {
+        toast.error('Admin setup incomplete. The CAFFEINE_ADMIN_TOKEN environment variable needs to be configured. Contact your system administrator.', {
+          duration: 8000,
+        });
+      } else if (errorMessage.includes('ADMIN_EXISTS')) {
+        toast.error('An admin already exists for this system. Please contact them for access.', {
+          duration: 5000,
+        });
+      } else {
+        toast.error(`Failed to promote to admin: ${errorMessage}`, {
+          duration: 5000,
+        });
+      }
+    }
+  };
+  
+  return (
+    <Card className="border-2 border-primary">
+      <CardHeader>
+        <div className="flex items-center justify-between">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <UserPlus className="h-6 w-6 text-primary" />
+              Become Admin
+            </CardTitle>
+            <CardDescription>
+              Initialize yourself as the first administrator
+            </CardDescription>
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setShowInstructions(!showInstructions)}
+          >
+            <Info className="h-4 w-4" />
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {showInstructions && (
+          <Alert>
+            <Info className="h-4 w-4" />
+            <AlertTitle>Admin Setup Requirements</AlertTitle>
+            <AlertDescription className="space-y-2 text-sm">
+              <p className="font-medium">Environment Configuration Required:</p>
+              <p>
+                The admin system requires the <code className="bg-muted px-1 py-0.5 rounded">CAFFEINE_ADMIN_TOKEN</code> environment 
+                variable to be set during deployment. This ensures secure admin initialization.
+              </p>
+              
+              <p className="font-medium mt-3">How it works:</p>
+              <ul className="list-disc list-inside ml-2 space-y-1">
+                <li>The first person to click "Initialize as Admin" and provide the correct token becomes the admin</li>
+                <li>The token must match the value set in the environment variable</li>
+                <li>Once an admin is assigned, no other users can become admin through this interface</li>
+              </ul>
+              
+              <p className="font-medium mt-3 text-destructive">Troubleshooting:</p>
+              <ul className="list-disc list-inside ml-2 space-y-1">
+                <li>If you see "environment variable" errors, the token hasn't been configured</li>
+                <li>Contact your system administrator or check your deployment configuration</li>
+                <li>For local development, set the env var in your dfx.json or .env file</li>
+              </ul>
+            </AlertDescription>
+          </Alert>
+        )}
+        
+        <form onSubmit={handlePromote} className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="adminSecret">Admin Token (required)</Label>
+            <Input
+              id="adminSecret"
+              type="password"
+              value={adminSecret}
+              onChange={(e) => setAdminSecret(e.target.value)}
+              placeholder="Enter the admin token from your system administrator"
+              className="rounded-sm"
+              required
+            />
+          </div>
+          
+          <div className="flex items-start gap-2 p-3 bg-muted rounded-sm">
+            <Shield className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+            <p className="text-xs text-muted-foreground">
+              You must enter the correct admin token that matches the CAFFEINE_ADMIN_TOKEN 
+              environment variable set during deployment. Only the first person with the correct 
+              token will become admin.
+            </p>
+          </div>
+          
+          <Button
+            type="submit"
+            disabled={promoteToAdminMutation.isPending}
+            className="w-full rounded-sm"
+          >
+            {promoteToAdminMutation.isPending ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Initializing...
+              </>
+            ) : (
+              <>
+                <UserPlus className="mr-2 h-4 w-4" />
+                Initialize as Admin
+              </>
+            )}
+          </Button>
+        </form>
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function AdminPage() {
   const { data: isAdmin, isLoading } = useIsCallerAdmin();
   
@@ -601,13 +741,28 @@ export default function AdminPage() {
   
   if (!isAdmin) {
     return (
-      <div className="container mx-auto px-4 py-8">
-        <Card>
-          <CardContent className="p-12 text-center">
-            <Shield className="h-12 w-12 text-destructive mx-auto mb-4" />
-            <h2 className="font-display text-2xl mb-2">Access Denied</h2>
-            <p className="text-muted-foreground">
-              You don't have permission to access the admin panel
+      <div className="container mx-auto px-4 py-8 max-w-2xl">
+        <div className="mb-6">
+          <div className="flex items-center gap-2 mb-2">
+            <Shield className="h-8 w-8 text-primary" />
+            <h1 className="font-display text-4xl text-primary tracking-wider">
+              ADMIN ACCESS
+            </h1>
+          </div>
+          <p className="text-muted-foreground">
+            You need admin privileges to access this panel
+          </p>
+        </div>
+        
+        <AdminPromotionSection />
+        
+        <Card className="mt-6">
+          <CardContent className="p-8 text-center">
+            <Info className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
+            <h3 className="font-semibold text-lg mb-2">Not an admin?</h3>
+            <p className="text-sm text-muted-foreground">
+              If you're the first user of this system, you can initialize yourself as admin above.
+              Otherwise, please contact an existing administrator to grant you access.
             </p>
           </CardContent>
         </Card>
